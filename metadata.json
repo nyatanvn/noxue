@@ -1,0 +1,6 @@
+{
+  "name": "Noxue",
+  "description": "A lightweight, artful flashcard app for language and medical learning. Supports XLSX, DOCX, and Google Docs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
