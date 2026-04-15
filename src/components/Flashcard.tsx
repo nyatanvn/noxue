@@ -70,29 +70,29 @@ const Flashcard: React.FC<FlashcardProps> = ({ card, autoplay, onResult, onNext,
         onClick={handleCardClick}
       >
         {/* Front Side */}
-        <div className="absolute inset-0 w-full h-full backface-hidden bg-card rounded-2xl shadow-bento border-2 border-medical p-8 flex flex-col items-center justify-center text-center">
-          <span className="inline-block px-2 py-1 bg-[#DCFCE7] text-[#166534] rounded-full text-[10px] font-bold mb-8 uppercase tracking-wider">Mobile Preview</span>
-          <div className="flex-1 flex items-center justify-center">
+        <div className="absolute inset-0 w-full h-full backface-hidden bg-card rounded-2xl shadow-bento border-2 border-medical p-8 flex flex-col items-center text-center overflow-y-auto">
+          <span className="inline-block px-2 py-1 bg-[#DCFCE7] text-[#166534] rounded-full text-[10px] font-bold mb-4 uppercase tracking-wider shrink-0">Front</span>
+          <div className="flex-1 flex items-center justify-center w-full py-4">
             <h3 className="text-2xl font-bold text-text-main leading-tight whitespace-pre-wrap font-sans tracking-tight">
               {card.front}
             </h3>
           </div>
-          <div className="mt-8 text-text-dim text-xs font-medium italic">
+          <div className="mt-auto pt-4 text-text-dim text-xs font-medium italic shrink-0">
             Tap to flip
           </div>
         </div>
 
         {/* Back Side */}
         <div 
-          className="absolute inset-0 w-full h-full backface-hidden bg-card border-2 border-lang rounded-2xl shadow-bento p-8 flex flex-col items-center justify-center text-center rotate-y-180"
+          className="absolute inset-0 w-full h-full backface-hidden bg-card border-2 border-lang rounded-2xl shadow-bento p-8 flex flex-col items-center text-center rotate-y-180 overflow-y-auto"
         >
-          <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest mb-8">Definition</span>
-          <div className="flex-1 flex items-center justify-center w-full">
+          <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest mb-4 shrink-0">Back</span>
+          <div className="flex-1 flex items-center justify-center w-full py-4">
             <h3 className="text-lg font-serif text-text-main leading-relaxed whitespace-pre-wrap">
               {renderHighlightedText(card.back, card.front)}
             </h3>
           </div>
-          <div className="mt-8 text-text-dim text-xs font-medium italic">
+          <div className="mt-auto pt-4 text-text-dim text-xs font-medium italic shrink-0">
             Tap to flip back
           </div>
         </div>

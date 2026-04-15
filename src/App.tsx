@@ -8,9 +8,13 @@ import DeckConfig from './components/DeckConfig';
 import Flashcard from './components/Flashcard';
 import DeckList from './components/DeckList';
 import Library from './components/Library';
+import Quiz from './components/Quiz';
+import FieldSettings from './components/FieldSettings';
 
 export default function App() {
   const [state, setState] = useState<AppState>('home');
+  const [isQuizMode, setIsQuizMode] = useState(false);
+  const [isFieldSettingsOpen, setIsFieldSettingsOpen] = useState(false);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [activeDeckId, setActiveDeckId] = useState<string | null>(null);
   const [rawData, setRawData] = useState<RawData | null>(null);
@@ -59,10 +63,35 @@ export default function App() {
     [decks, activeDeckId]
   );
 
-  const activeCards = useMemo(() => {
+  const units = useMemo(() => {
     if (!activeDeck) return [];
-    return activeDeck.cards.slice(currentUnit * unitSize, (currentUnit + 1) * unitSize);
-  }, [activeDeck, currentUnit, unitSize]);
+    
+    const hasUnits = activeDeck.cards.some(c => c.rawData?._Unit);
+    
+    if (hasUnits) {
+      const unitMap = new Map<string, Card[]>();
+      activeDeck.cards.forEach(card => {
+        const unitName = card.rawData?._Unit || 'Uncategorized';
+        if (!unitMap.has(unitName)) unitMap.set(unitName, []);
+        unitMap.get(unitName)!.push(card);
+      });
+      return Array.from(unitMap.entries()).map(([name, cards]) => ({ name, cards }));
+    } else {
+      const chunks = [];
+      for (let i = 0; i < activeDeck.cards.length; i += unitSize) {
+        chunks.push({
+          name: `Unit ${i / unitSize + 1} (${i + 1}-${Math.min(i + unitSize, activeDeck.cards.length)})`,
+          cards: activeDeck.cards.slice(i, i + unitSize)
+        });
+      }
+      return chunks;
+    }
+  }, [activeDeck, unitSize]);
+
+  const activeCards = useMemo(() => {
+    if (!units.length) return [];
+    return units[currentUnit]?.cards || [];
+  }, [units, currentUnit]);
 
   // Reset card index when active deck changes
   useEffect(() => {
@@ -191,6 +220,29 @@ export default function App() {
     }
   };
 
+  const handleUpdateFields = (frontCols: string[], backCols: string[]) => {
+    if (!activeDeck) return;
+    
+    setDecks(prev => prev.map(deck => {
+      if (deck.id !== activeDeck.id) return deck;
+      
+      return {
+        ...deck,
+        frontCols,
+        backCols,
+        cards: deck.cards.map(card => {
+          if (!card.rawData) return card;
+          return {
+            ...card,
+            front: frontCols.map(c => card.rawData![c]).filter(Boolean).join('\n'),
+            back: backCols.map(c => card.rawData![c]).filter(Boolean).join('\n'),
+          };
+        })
+      };
+    }));
+    setIsFieldSettingsOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-bg text-text-main font-sans selection:bg-medical selection:text-white">
       {/* Header */}
@@ -206,8 +258,8 @@ export default function App() {
             <h1 className="text-xl font-extrabold tracking-tight">Noxue</h1>
           </div>
 
-          <div className="flex items-center gap-6 text-sm font-medium text-text-dim">
-            <div className="hidden md:flex items-center gap-2 bg-bg border border-border rounded-lg px-2 py-1">
+          <div className="flex items-center gap-3 md:gap-6 text-sm font-medium text-text-dim">
+            <div className="flex items-center gap-2 bg-bg border border-border rounded-lg px-2 py-1">
               <select 
                 value={theme} 
                 onChange={(e) => setTheme(e.target.value as Theme)}
@@ -222,15 +274,15 @@ export default function App() {
             </div>
             
             <button onClick={() => setState('home')} className={cn("hover:text-text-main transition-colors", state === 'home' && "text-text-main font-bold")}>Dashboard</button>
-            <button onClick={() => setState('library')} className={cn("hidden md:block hover:text-text-main transition-colors", state === 'library' && "text-text-main font-bold")}>Library</button>
+            <button onClick={() => setState('library')} className={cn("hover:text-text-main transition-colors", state === 'library' && "text-text-main font-bold")}>Library</button>
             
             {(state === 'home' || state === 'library') && (
               <button 
                 onClick={() => setState('uploading')}
-                className="bg-medical text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 hover:opacity-90 transition-all active:scale-95 ml-4 shadow-bento"
+                className="bg-medical text-white px-3 py-2 md:px-4 md:py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 hover:opacity-90 transition-all active:scale-95 ml-1 md:ml-4 shadow-bento"
               >
                 <Plus className="w-4 h-4" />
-                Add Source
+                <span className="hidden sm:inline">Add Source</span>
               </button>
             )}
             {state === 'learning' && (
@@ -388,17 +440,32 @@ export default function App() {
                     <ChevronLeft className="w-4 h-4" />
                     Exit Session
                   </button>
-                  <h2 className="text-2xl font-bold text-text-main">{activeDeck.name}</h2>
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-2xl font-bold text-text-main">{activeDeck.name}</h2>
+                    <button 
+                      onClick={() => setIsFieldSettingsOpen(true)}
+                      className="text-text-dim hover:text-text-main transition-colors"
+                      title="Adjust Fields"
+                    >
+                      <Settings2 className="w-5 h-5" />
+                    </button>
+                    <button 
+                      onClick={() => setIsQuizMode(true)}
+                      className="bg-medical/10 text-medical px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-medical/20 transition-colors"
+                    >
+                      Quiz Mode
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-4 bg-card p-2 rounded-xl border border-border shadow-bento">
                   <select 
                     value={currentUnit} 
                     onChange={e => setCurrentUnit(Number(e.target.value))}
-                    className="bg-bg border border-border rounded-lg px-3 py-2 text-sm font-bold text-text-main outline-none focus:border-medical"
+                    className="bg-bg border border-border rounded-lg px-3 py-2 text-sm font-bold text-text-main outline-none focus:border-medical max-w-[200px] truncate"
                   >
-                    {Array.from({ length: Math.ceil((activeDeck?.cards.length || 0) / unitSize) }).map((_, i) => (
-                      <option key={i} value={i}>Unit {i + 1} ({i * unitSize + 1}-{Math.min((i + 1) * unitSize, activeDeck?.cards.length || 0)})</option>
+                    {units.map((unit, i) => (
+                      <option key={i} value={i}>{unit.name}</option>
                     ))}
                   </select>
                   
@@ -432,7 +499,23 @@ export default function App() {
                 </div>
               </div>
 
-              {currentCard ? (
+              {isFieldSettingsOpen && activeDeck && (
+                <FieldSettings 
+                  deck={activeDeck}
+                  onSave={handleUpdateFields}
+                  onClose={() => setIsFieldSettingsOpen(false)}
+                />
+              )}
+
+              {isQuizMode ? (
+                <Quiz 
+                  cards={activeCards}
+                  onComplete={(score, total) => {
+                    setIsQuizMode(false);
+                  }}
+                  onExit={() => setIsQuizMode(false)}
+                />
+              ) : currentCard ? (
                 <Flashcard 
                   key={currentCard.id}
                   card={currentCard}

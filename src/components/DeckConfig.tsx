@@ -34,6 +34,7 @@ export default function DeckConfig({ rawData, onComplete, onCancel }: DeckConfig
       back: backCols.map(c => row[c]).filter(Boolean).join('\n'),
       learned: false,
       strength: 0,
+      rawData: row,
     })).filter(card => card.front && card.back);
 
     const deck: Deck = {
@@ -43,6 +44,9 @@ export default function DeckConfig({ rawData, onComplete, onCancel }: DeckConfig
       createdAt: Date.now(),
       lastAccessed: Date.now(),
       sourceType: 'xlsx', // Simplified
+      headers: rawData.headers,
+      frontCols,
+      backCols,
     };
 
     onComplete(deck);

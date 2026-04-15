@@ -6,6 +6,7 @@ export interface Card {
   lastReviewed?: number;
   strength: number; // 0 to 1, for spaced repetition or learning curve
   note?: string;
+  rawData?: Record<string, any>;
 }
 
 export interface Deck {
@@ -15,6 +16,9 @@ export interface Deck {
   createdAt: number;
   lastAccessed: number;
   sourceType: 'xlsx' | 'docx' | 'manual';
+  headers?: string[];
+  frontCols?: string[];
+  backCols?: string[];
 }
 
 export interface RawData {
