@@ -33,8 +33,11 @@ export async function parseXlsx(file: File): Promise<RawData> {
 }
 
 export async function parseDocx(file: File): Promise<RawData> {
+  console.log("parseDocx started for file:", file.name);
   const arrayBuffer = await file.arrayBuffer();
   const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+  console.log("Mammoth HTML generated. Length:", htmlResult.value.length);
+  
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlResult.value, 'text/html');
   
@@ -43,42 +46,88 @@ export async function parseDocx(file: File): Promise<RawData> {
   let headers: string[] = [];
 
   const elements = Array.from(doc.body.children);
+  console.log("Top-level elements found:", elements.length);
   
   for (const el of elements) {
-    if (el.tagName.toLowerCase() === 'p' || el.tagName.toLowerCase() === 'h1' || el.tagName.toLowerCase() === 'h2' || el.tagName.toLowerCase() === 'h3') {
+    const tagName = el.tagName.toLowerCase();
+    if (tagName === 'p' || tagName === 'h1' || tagName === 'h2' || tagName === 'h3') {
       const text = el.textContent?.trim() || '';
-      if (/^(?:bài|unit)\s*\d+/i.test(text)) {
+      // Improved regex to catch "Bài 1", "Bài: 1", "Unit 01", etc.
+      if (/^(?:bài|unit)\s*[:\-]?\s*\d+/i.test(text)) {
         currentUnit = text;
+        console.log("--> Unit recognized outside table:", currentUnit);
       }
-    } else if (el.tagName.toLowerCase() === 'table') {
+    } else if (tagName === 'table') {
+      console.log("--> Table found. Current unit:", currentUnit);
       const rows = Array.from(el.querySelectorAll('tr'));
       if (rows.length > 0) {
-        // If headers are not set yet, use the first row of the first table
-        let tableHeaders = Array.from(rows[0].querySelectorAll('td, th')).map(td => td.textContent?.trim() || '');
-        let dataStartIndex = 1;
-
-        if (headers.length === 0) {
-          headers = tableHeaders;
-        } else {
-          // If this table doesn't have headers matching the first one, assume it has no headers
-          // and data starts from index 0. (Simple heuristic)
-          if (tableHeaders[0] !== headers[0]) {
-            dataStartIndex = 0;
-            tableHeaders = headers;
+        
+        let headerRowIndex = 0;
+        let currentTableHeaders: string[] = [];
+        
+        // Find the true header row (skip initial Unit rows inside the table)
+        for (let i = 0; i < rows.length; i++) {
+          const cells = Array.from(rows[i].querySelectorAll('td, th')).map(td => td.textContent?.trim() || '');
+          const nonEmpties = cells.filter(t => t.length > 0);
+          
+          if (nonEmpties.length === 1 && /^(?:bài|unit)\s*[:\-]?\s*\d+/i.test(nonEmpties[0])) {
+            currentUnit = nonEmpties[0];
+            console.log("--> Unit recognized at top of table:", currentUnit);
+            continue;
+          }
+          
+          if (nonEmpties.length > 0) {
+            currentTableHeaders = cells;
+            headerRowIndex = i;
+            break;
           }
         }
 
-        const dataRows = rows.slice(dataStartIndex).map(row => {
-          const cells = Array.from(row.querySelectorAll('td'));
+        let dataStartIndex = headerRowIndex + 1;
+
+        if (headers.length === 0) {
+          headers = currentTableHeaders;
+        } else {
+          // If this table doesn't have headers matching the first one, assume it has no headers
+          if (currentTableHeaders[0] !== headers[0]) {
+            dataStartIndex = headerRowIndex; // It's data, not headers
+            currentTableHeaders = headers;
+          }
+        }
+
+        const dataRows: Record<string, string>[] = [];
+        const rowsToProcess = rows.slice(dataStartIndex);
+        
+        for (const row of rowsToProcess) {
+          const cells = Array.from(row.querySelectorAll('td, th'));
+          const cellTexts = cells.map(c => c.textContent?.trim() || '');
+          const nonEmpties = cellTexts.filter(t => t.length > 0);
+          
+          // Check if this row is a unit header inside the table
+          const firstCellText = cellTexts[0] || '';
+          const isUnitRow = nonEmpties.length > 0 && nonEmpties.length <= 2 && /^(?:bài|unit)\s*[:\-]?\s*\d+/i.test(firstCellText);
+
+          if (isUnitRow) {
+            currentUnit = nonEmpties.join(' ').trim();
+            console.log("--> Unit recognized inside table:", currentUnit);
+            continue; // Skip adding this row as a flashcard
+          }
+
           const rowData: Record<string, string> = { _Unit: currentUnit };
-          tableHeaders.forEach((header, i) => {
+          let hasData = false;
+          currentTableHeaders.forEach((header, i) => {
             if (header) {
-              rowData[header] = cells[i]?.textContent?.trim() || '';
+              rowData[header] = cellTexts[i] || '';
+              if (rowData[header]) hasData = true;
             }
           });
-          return rowData;
-        });
+          
+          if (hasData) {
+            dataRows.push(rowData);
+          }
+        }
         allRows = allRows.concat(dataRows);
+        console.log(`Parsed ${dataRows.length} rows from table.`);
       }
     }
   }
@@ -87,6 +136,7 @@ export async function parseDocx(file: File): Promise<RawData> {
     if (!headers.includes('_Unit')) {
       headers.push('_Unit');
     }
+    console.log("Successfully parsed tables. Total rows:", allRows.length);
     return {
       headers,
       rows: allRows,
@@ -94,6 +144,7 @@ export async function parseDocx(file: File): Promise<RawData> {
     };
   }
 
+  console.log("No tables found. Falling back to raw text parsing.");
   // Fallback: split by lines if no table
   const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
   const text = result.value;
